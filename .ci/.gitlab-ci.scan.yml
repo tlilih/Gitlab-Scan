@@ -1,0 +1,117 @@
+
+include:
+  - template: Jobs/Secret-Detection.gitlab-ci.yml
+  - template: Jobs/Dependency-Scanning.gitlab-ci.yml
+  - template: Jobs/SAST.gitlab-ci.yml
+  - template: Jobs/Container-Scanning.gitlab-ci.yml
+
+variables:
+  DS_EXCLUDED_ANALYZERS: "ruby,python,java,go,gemnasium-python-dependency_scanning,gemnasium-maven-dependency_scanning"
+  DS_DEFAULT_ANALYZERS: "gemnasium-php, gemnasium-javascript"
+
+###################
+#  Security Scan  #
+###################
+
+secret_detection:
+  stage: security_scan
+  after_script:
+    - echo $CI_PIPELINE_SOURCE;
+    - mkdir reports
+    - cp -fv gl-secret-detection-report.json reports/gl-secret-detection-report.json
+  artifacts:
+    name: $CI_JOB_NAME
+    paths:
+      - 'reports/*.json'
+    reports:
+      secret_detection: gl-secret-detection-report.json
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "trigger" || $CI_JOB_MANUAL == "true"
+      when: never
+    - when: always
+
+gemnasium-dependency_scanning:
+  stage: security_scan
+  after_script:
+    - mkdir reports
+    - cp gl-dependency-scanning-report.json reports/gl-dependency-scanning-report.json
+    - ls -l reports
+  artifacts:
+    paths:
+      - 'reports/*.json'
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "trigger" || $CI_JOB_MANUAL == "true"
+      when: never
+    - when: always
+
+sast:
+  stage: security_scan
+  after_script:
+    - mkdir reports
+    - cp -fv *.json reports/
+  artifacts:
+    paths:
+      - 'reports/*.json'
+    reports:
+      dependency_scanning: gl-sast-report.json
+
+###################
+#  Dynamic Scan   #
+###################
+
+dast_scan:
+  stage: dynamic_scan
+  image: ghcr.io/zaproxy/zaproxy:stable
+  timeout: 20h
+  variables:
+    ZAP_BASE_URL: "YOUR_SITE_URL"
+    ZAP_REPORT: "zap-report.html"
+    ZAP_REPORT_JSON: "zap-report.json"
+  script:
+    - mkdir -p /zap/wrk
+    - mkdir -p install
+    - mkdir -p reports
+    - chmod -R 777 /zap/wrk
+    - cp buildtools/zap.context /zap/wrk/zap.context
+    - zap-full-scan.py -d -t $ZAP_BASE_URL -J /zap/wrk/$ZAP_REPORT_JSON -r /zap/wrk/$ZAP_REPORT -n /zap/wrk/zap.context -U YOUR_USERNAME -z "-config api.addrs.addr.name=.* -config api.addrs.addr.regex=true -config api.disablekey=true" -I -a -j
+    - cp /zap/wrk/$ZAP_REPORT_JSON reports/$ZAP_REPORT_JSON
+    - cp zap.out reports/zap.out
+    - cp /zap/wrk/$ZAP_REPORT .
+  artifacts:
+    paths:
+      - 'reports/*.json'
+      - 'reports/*.out'
+      - zap-report.html
+    expire_in: 1 week
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+      when: always
+    - if: $CI_PIPELINE_SOURCE == "trigger" || $CI_JOB_MANUAL == "true"
+      when: never
+
+###################
+# Container Scan  #
+###################
+
+container_scanning:
+  stage: container_scan
+  variables:
+    GIT_STRATEGY: fetch
+    SECURE_LOG_LEVEL: info
+    CS_IMAGE: $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
+  before_script:
+    - mkdir -p artifacts
+  after_script:
+    - ls *.json
+    - mkdir reports
+    - cp -fv gl-container-scanning-report.json reports/gl-container-scanning-report.json
+  artifacts:
+    name: $CI_JOB_NAME
+    paths:
+      - 'reports/*.json'
+    reports:
+      container_scanning: gl-container-scanning-report.json
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+      when: always
+    - when: manual

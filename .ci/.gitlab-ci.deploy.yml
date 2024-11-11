@@ -1,0 +1,22 @@
+pages:
+  stage: deploy
+  image: node:latest
+  dependencies:
+      - container_scanning
+      - secret_detection
+      - gemnasium-dependency_scanning
+      - semgrep-sast
+  # add DAST
+  script:
+    - mkdir -p public
+    - cd buildtools/pages
+    - npm install
+    - node generate-report.js
+    - npm run build
+    - mv dist/* ../../public/
+  artifacts:
+    paths:
+      - public
+    expire_in: 30 days
+  only:
+    - master

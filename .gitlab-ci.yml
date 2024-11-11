@@ -1,0 +1,23 @@
+stages:
+  - security_scan
+  - build
+  - container_scan
+  - dynamic_scan
+  - deploy
+
+include:
+  - local: .ci/.gitlab-ci.build.yml
+  - local: .ci/.gitlab-ci.scan.yml
+  - local: .ci/.gitlab-ci.deploy.yml
+
+variables:
+  BUILD_DOCKER_IMAGE: "DOKER_IMAGE_HERE"
+  DOCKER_HOST: tcp://registry.gutlab.com:2375/
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: ""
+  DOCKER_CONFIG: $CI_PROJECT_DIR/.docker
+  MASTER_IMAGE: "$CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG"
+
+after_script:
+  - echo "finished running $CI_JOB_NAME!"
+

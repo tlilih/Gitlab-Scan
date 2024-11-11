@@ -1,0 +1,11 @@
+build:
+  stage: build
+  image: docker:stable
+  services:
+    - name: docker:dind
+  script:
+    - echo "Here build your Docker image..."
+    #- docker build -t $MASTER_IMAGE --target base . 
+    #- docker push "$MASTER_IMAGE"
+  only:
+    - master
